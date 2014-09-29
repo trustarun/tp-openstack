@@ -24,6 +24,25 @@ class cloud_controller::setup_keystone(
 	# Add a Keystone service
 	class { 'keystone::endpoint': }
 
+	# Create an openrc file.It will allow to perform keystone task without entering credential every time
+	file { '/root/openrc':
+	  ensure    => present,
+	  owner     => 'root',
+	  group     => 'root',
+	  mode      => '0600',
+	  content   =>
+	"
+	export OS_TENANT_NAME=openstack
+	export OS_USERNAME=admin
+	export OS_PASSWORD=${keystone_admin_password}
+	export OS_AUTH_URL=${os_auth_url}
+	export OS_AUTH_STRATEGY=keystone
+	export SERVICE_TOKEN=${admin_token}
+	export SERVICE_ENDPOINT=${service_end_point}
+	"
+	}
+
+        #order the keystone resource
 	Class['mysql::server'] -> Class['keystone::db::mysql']
 	Class['keystone::db::mysql'] -> Class['keystone']
 
