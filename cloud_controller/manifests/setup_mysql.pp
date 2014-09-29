@@ -1,16 +1,15 @@
 class cloud_controller::setup_mysql(
-$root_password = "tparun1529",
-$bind_address = "0.0.0.0",
-){
+) inherits cloud_controller::params {
 
-class {'mysql::bindings':}
+	class {'mysql::bindings':}
 
-->
+	class { 'mysql::server':
+		root_password => $root_password,
+		old_root_password => $old_root_password,
+	}
 
-class { 'mysql::server':
-    root_password => $root_password,
-}
-->
-# Secure the MySQL installation
-class { 'mysql::server::account_security': }
+	class { 'mysql::server::account_security': }
+
+	Class['mysql::bindings'] -> Class['mysql::server'] -> Class['mysql::server::account_security']
+
 }

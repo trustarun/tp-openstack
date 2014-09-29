@@ -1,10 +1,11 @@
 class cloud_controller::setup_horizon(
-$memcached_listen_ip = "127.0.0.1",
-$horizone_secrete_key = "tparunhappy1529horizon",
-){
-class { 'horizon': 
- secret_key => $horizone_secrete_key,
-}
+) inherits cloud_controller::params {
 
-class { 'memcached': listen_ip => '127.0.0.1' }
+	class { 'horizon':
+	 secret_key => $horizone_secrete_key,
+         keystone_url => $os_auth_url,
+	}
+
+	class { 'memcached': listen_ip => '127.0.0.1' }
+
 }
