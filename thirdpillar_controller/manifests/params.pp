@@ -1,6 +1,11 @@
 class thirdpillar_controller::params{
 #Mysql Variables
 $mysql_allowed_hosts = ['127.0.0.%', '10.0.0.%']
+$root_password = "tparun1529"
+$mysql_module = 3 # must be higher then version 2.2
+
+
+
 
 #keystone variables
 $admin_token = "tparunxyz1529happy"
@@ -27,8 +32,8 @@ $nova_db_password = "tparun1529"
 $nova_keystone_password = "tparun1529"
 $private_interface = "eth1"
 $public_interface = "eth0"
-$network_fixed_range = "192.168.173.112/24"
-$num_networks = "255"
+$network_fixed_range = "192.168.177.167/24"
+$num_networks = "1"
 $vlan_start = "100"
 
 #horizon variables
