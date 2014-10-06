@@ -1,0 +1,197 @@
+Referances:
+*************
+
+	https://docs.puppetlabs.com/guides/install_puppet/pre_install.html
+	https://docs.puppetlabs.com/puppet/latest/reference/system_requirements.html#basic-requirements
+	https://docs.puppetlabs.com/guides/install_puppet/install_debian_ubuntu.html
+	https://docs.puppetlabs.com/guides/install_puppet/post_install.html #post install process
+	https://docs.puppetlabs.com/puppet/latest/reference/dirs_confdir.html # location and structure of puppet directory
+	https://docs.puppetlabs.com/puppet/latest/reference/config_important_settings.html#settings-for-puppet-master-servers # settings
+	https://docs.puppetlabs.com/guides/passenger.html
+	http://projects.puppetlabs.com/projects/1/wiki/simplest_puppet_install_pattern
+
+
+______________________________________________________________________________________________________________________________
+
+Requirement :
+**************
+	=> puppet master server need to be linux machine. window can't be puppet master
+	=> deployment type can be agent/master or standalone puppet. In later case you need to manually run puppet apply.
+	   agent/master is default
+	=> master server need to be roubst machine, with good LAN connection. It need to be always available.
+	   for standalone puppet, you do not need to worry of LAN and always Up requirement.but You will need to come 
+	   up with your own solution for distributing updated manifests, modules, and data to each node
+    => Your puppet master server must have a FQDN
+	=> Network configuration:
+	   -> if behind fireball, allow incoming connection to port 8140
+	   -> Every node must have a unique hostname. Forward and reverse DNS must both be configured correctly. 
+       ->The default puppet master hostname is puppet. Your agent nodes can be ready sooner if this
+		  hostname resolves to your puppet master.
+	=> check time setting of server having puppet master
+		The puppet master server that will be acting as the certificate authority should have its system time set accurately.
+		You should probably use NTP.
+		(If it doesn’t, it may mistakenly issue agent certificates from the distant past or future, 
+		which other nodes will treat as expired.)
+    => Need to have root access to system. Different commands need superuser privelege to execute.
+
+
+
+_________________________________________________________________________________________________________________________________
+
+Prepare Puppet Installation dependency:
+***************************************
+    Note : The server used is a UBUNTU machine.Adjust you command if you are on some other flavour of Linux
+
+	=> pre-requirement:
+		   1-  sudo apt-get install ruby1.9.1 #Install ruby(any of 1.8.7, 1.9.3, 2.0.x)
+		   2-  sudo apt-get install ruby1.9.1-dev # needed by other gems to build native extensions
+           3-  sudo apt-get install rubygems
+		   4-  sudo apt-get install facter # install facter
+           5-  sudo apt-get install git # needed to clone puppet repositories
+		   6-  sudo gem install hiera  # install hiera
+		   7-  sudo gem install json
+		   8-  sudo gem install json
+		   9-  sudo gem install rgen
+		  10-  sudo gem install msgpack
+
+	=> Add puppet repository to Apt packages:
+	   It can be found at  https://apt.puppetlabs.com/ . They have different files
+
+		Debian 6 “Squeeze” (obsolete stable release) (also supported by Puppet Enterprise)
+		Debian 7 “Wheezy” (current stable release) (also supported by Puppet Enterprise)
+		Ubuntu 14.04 LTS “Trusty Tahr” (also supported by Puppet Enterprise)
+		Ubuntu 12.04 LTS “Precise Pangolin” (also supported by Puppet Enterprise)
+		Ubuntu 10.04 LTS “Lucid Lynx” (also supported by Puppet Enterprise)
+
+	   Since your OS is Ubuntu 14.04 LTS, you should download
+
+	   puppetlabs-release-trusty.deb	26-Aug-2014 10:21 	7.2K
+	   These file just set puppetlab to apt-get
+
+	=> $ wget https://apt.puppetlabs.com/puppetlabs-release-trusty.deb
+	   $ sudo dpkg -i puppetlabs-release-trusty.deb
+	   $ sudo apt-get update
+______________________________________________________________________________________________________________________
+
+Install puppet master :
+***************************
+	
+   => sudo apt-get install puppetmaster-passenger .
+
+		 Warning: Setting templatedir is deprecated. See http://links.puppetlabs.com/env-settings-deprecations
+		   (at /usr/lib/ruby/vendor_ruby/puppet/settings.rb:1117:in `issue_deprecation_warning')
+                       
+		 AH00558: apache2: Could not reliably determine the server's fully qualified domain name, using 127.0.1.1. 
+		 Set the 'ServerName' directive globally to suppress this message
+
+         NOTE : you get a error and a warning at this stage.We will fix this under post installation configuration part.
+
+		To fix the apache error:
+		-> open the conf file :nano /etc/apache2/apache2.conf and add below at the end
+			
+           ServerName localhost 
+  
+
+
+	=> sudo apt-get install puppetmaster
+		This will install Puppet, its prerequisites, and an init script (/etc/init.d/puppetmaster) 
+		for running a test-quality puppet master server. do not start the puppet master now.
+
+______________________________________________________________________________________________________________
+
+Configure Puppet Master :
+***************************
+	=> configure /etc/hosts
+
+		You may have single puppet master or multiple master with a Central Master, balancing all other. 
+        For your case, it is single master for now or you can say that it is your CA master.
+
+		Your master should be on server with fqdn. since, currently you have not purchased any domain name, 
+        you can add it to /etc/hosts file name.
+		It look as below.
+
+		27.0.0.1        localhost
+		10.1.5.143      puppet01.thirdpillar.com        puppet01
+
+	=> Remove templatedir from puppet.conf 	(/etc/puppet/puppet.conf)
+   		
+		templatedir directive is depricated for puppet above 3.0. So remove the below line from main section
+
+		templatedir=$confdir/templates
+
+	=> Add dns_alt_names directive (/etc/puppet/puppet.conf)
+		
+		Add the below line to puppet.conf file under main section      
+
+		dns_alt_names = puppet01.thirdpillar.com 
+  
+    => Add server directive (/etc/puppet/puppet.conf)
+       This is very important as all the agent will try to connect to this server at the port 8140
+
+        Add the below line to puppet.conf file under main section
+
+        server = puppet01.thirdpillar.com 
+
+       NOTE : the server name should be a fully qualified domain name(fqdn)
+		
+    => generate certificate for the master
+    
+       once you have added dns_alt_names directive above, starting the puppet master will generate the certificates
+       for you.
+
+		# sudo puppet master --verbose --no-daemonize
+		Warning: Setting templatedir is deprecated. See http://links.puppetlabs.com/env-settings-deprecations
+		   (at /usr/lib/ruby/vendor_ruby/puppet/settings.rb:1095:in `block in issue_deprecations')
+		Notice: Starting Puppet master version 3.6.2
+		Error: Could not run: Address already in use - bind(2)
+
+		Try after killing apache2
+
+		root@arun-desktop:/etc/puppet# ps -ef | grep apache2
+		www-data 10916  1763  0 12:48 ?        00:00:03 /usr/sbin/apache2 -k start
+		root     22977 22461  0 17:00 pts/1    00:00:00 grep --color=auto apache2
+		root@arun-desktop:/etc/puppet# kill -9 10916
+		root@arun-desktop:/etc/puppet# ps -ef | grep apache2
+		root     22979 22461  0 17:01 pts/1    00:00:00 grep --color=auto apache2
+		root@arun-desktop:/etc/puppet# sudo puppet master --verbose --no-daemonize
+		Notice: Starting Puppet master version 3.6.2
+
+		press cnt+ c to stop it
+
+		Now if you go to ssl dir (/var/lib/puppet/ssl), you have configured above, you can see the certificates there
+
+____________________________________________________________________________________________________________________
+             
+
+Installing puppet agent:
+******************************
+
+	It can be on separate machine other then master, but for now, it will be on your same machine
+
+	NOTE : the pre requirement will be same as for the master
+
+    sudo apt-get install puppet
+	  * Starting puppet agent 
+                                                                                                                      
+	  puppet not configured to start, please edit /etc/default/puppet to enable 
+
+
+_____________________________________________________________________________________
+
+STARTING puppet agent:
+**************************
+
+	STEP 1: enabling puppet agent start 
+		As you have seen the message above "puppet not configured to start" . To allow agent to start
+		edit /etc/default/puppet file. change the value of START from no to yes
+
+	STEP 2: Start the puppet agent:
+        puppet agent -t --debug --verbos
+
+
+
+
+
+	 
+
+   
