@@ -1,0 +1,134 @@
+Referance:
+*************
+https://docs.puppetlabs.com/guides/passenger.html
+https://www.phusionpassenger.com/documentation/Users%20guide%20Apache.html
+____________________________________________________________________________________________________
+
+
+=> Install passenger dependency:
+
+	1- sudo apt-get install libcurl4-openssl-dev
+	2- sudo apt-get install libssl-dev
+	3- sudo apt-get install zlib1g-dev
+	4- sudo apt-get install apache2-threaded-dev
+	5- sudo apt-get install libapr1-dev
+	6- sudo apt-get install libaprutil1-dev
+
+
+=> Install passenger
+	 sudo gem install rack passenger
+
+=> Install apache2 module
+	 sudo passenger-install-apache2-module
+   		It will lead you to UI asking you to choose different option as you proceed. 
+		You can go with the defaults.
+   		At the end you will get below message:
+	   --------------------------------------------
+		Almost there!
+
+		Please edit your Apache configuration file, and add these lines:
+
+	   LoadModule passenger_module /var/lib/gems/1.8/gems/passenger-4.0.53/buildout/apache2/mod_passenger.so
+	   <IfModule mod_passenger.c>
+		 PassengerRoot /var/lib/gems/1.8/gems/passenger-4.0.53
+		 PassengerDefaultRuby /usr/bin/ruby1.8
+	   </IfModule>
+
+		After you restart Apache, you are ready to deploy any number of web
+		applications on Apache, with a minimum amount of configuration!
+
+     NOTE : Keep note of the message asking you to add in apache configuration file.
+
+=> change ownership of your dashboard directory to www-root
+   By default /var/www directory is owned by www-root user. So any project within it is directly accesible
+   to apache. But as per puppet guideline you have placed your projetc at /opt/puppet-dashbaord
+   so give its ownership to www-root and also give it suitable permission.
+
+	chgrp -R www-data /opt/puppet-dashboard
+	chmod -R 755 /opt/puppet-dashboard
+
+=> Register port to listen your application.
+   
+   By default apache listen to port 80. Say some other application allready running at that port and we want
+   to run our dashboard at 8080.
+
+   Open the /etc/apache2/ports.conf file and add below line to it
+
+	NameVirtualHost 10.1.5.143:8080 # 10.1.5.143 is my server IP, replace it with your IP
+	Listen 8080
+
+=> Create a basic Authentication file for the puppet dashboard.
+   Since the puppet-dashboard contain senstive data we need to secure it. We can  make it to
+   be accesible from few Ip or put behind firewall etc. But for now we will add a basic authentication.
+
+   cd etc/apache2 # move to apache2 folder
+    # below command will create a password file with user tpcloud and the password you provide
+   root@puppet01:/etc/apache2# htpasswd -c passwords tpcloud
+				New password: 
+				Re-type new password:
+
+=> Configure Application to run on Apache.
+   
+    puppet-dashboard provide a sample configuration file dashboard-vhost.conf at 
+   /ext/passenger/dashboard-vhost.conf inside the project itself. You can refer it
+   for more configuration changes.
+
+   For now create a file called puppet-dashboard inside /etc/apache2/sites-enabled directory
+   and add below code to it.
+
+
+	# UPDATE THESE PATHS TO SUIT YOUR ENVIRONMENT
+	<IfModule mod_passenger.c>
+		 PassengerRoot /usr
+		 PassengerRuby /usr/bin/ruby
+	</IfModule>
+
+
+	# you may want to tune these settings
+	PassengerHighPerformance on
+	PassengerMaxPoolSize 12
+	PassengerPoolIdleTime 1500
+	PassengerMaxRequests 1000
+	PassengerStatThrottleRate 120
+
+	<VirtualHost 10.1.5.143:8080>
+		    RailsAutoDetect On
+		    RackBaseURI /
+		    RackEnv production
+		    ServerName puppet01.thirdpillar.com
+		    DocumentRoot /opt/puppet-dashboard/public/
+		    <Directory /opt/puppet-dashboard/public/>
+		            Options None
+		            Order allow,deny
+		            allow from all
+		    </Directory>
+	  ErrorLog /var/log/apache2/puppet01.thirdpillar.com_error.log
+	  LogLevel warn
+	  CustomLog /var/log/apache2/puppet01.thirdpillar.com_access.log combined
+	  ServerSignature On
+	  <Location "/">
+		Order allow,deny
+		Allow from 10.1.5.143
+		Satisfy any
+		AuthName "Puppet Dashboard"
+		AuthType Basic
+		AuthUserFile /etc/apache2/passwords
+		Require valid-user
+	  </Location>
+
+	</VirtualHost>
+
+=> Restart apache server.
+   $ sudo /etc/init.d/apache2 restart
+
+=> Check the dashboard in browser
+   Go to the URL http://10.1.5.143:8080/  , enter the username tpcloud and password you
+   have provided while creating the auth file above. You will see the dashboard
+
+   
+
+
+
+
+
+

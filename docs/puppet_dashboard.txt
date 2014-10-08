@@ -1,0 +1,241 @@
+Referances:
+*************
+https://docs.puppetlabs.com/dashboard/manual/1.2/bootstrapping.html
+https://docs.puppetlabs.com/dashboard/manual/1.2/configuring.html
+https://docs.puppetlabs.com/guides/inventory_service.html
+____________________________________________________________________________________________________________
+
+Requirement:
+**************
+	-> puppet need to be installed on your system.If it is not first install it following puppet_installation.txt 
+	-> dashboard interface is a ruby application. It is good to have basic knowladge of ROR application
+	-> The puppet-dashboard repository should be accesible on your machine
+	-> The source code can be placed in /opt or /usr/share directory. If you clone the git repository place in /opt
+	   directory. installing with apt-get command will put it under /usr/share directory by default. 
+	-> Need to have root access to machine, as most of the command will need superuser privelage.
+
+______________________________________________________________________________________________________________
+
+Setup environment for puppet-dashboard:
+****************************************
+
+	-> create a user and group for puppet-dashboard
+
+		root@puppet01:~# adduser puppet-dashboard 
+			Adding user `puppet-dashboard' ...
+			Adding new group `puppet-dashboard' (1001) ...
+			Adding new user `puppet-dashboard' (1001) with group `puppet-dashboard' ...
+			Creating home directory `/home/puppet-dashboard' ...
+			Copying files from `/etc/skel' ...
+			Enter new UNIX password: 
+			Retype new UNIX password: 
+			passwd: password updated successfully
+			Changing the user information for puppet-dashboard
+			Enter the new value, or press ENTER for the default
+				Full Name []: 
+				Room Number []: 
+				Work Phone []: 
+				Home Phone []: 
+				Other []: 
+			Is the information correct? [Y/n] y
+
+		NOTE : give the password for the new user, you can keep the default for other options
+
+	-> Install rubygems
+		sudo apt-get install rubygems
+
+	-> Install rake
+		sudo apt-get install rake
+
+	-> instally dependency gems
+
+		Depending on your version of ruby, you may need to install ruby rdoc/ri data:
+
+		<= 1.8.6 : unsupported
+		 = 1.8.7 : gem install rdoc-data; rdoc-data --install
+		 = 1.9.1 : gem install rdoc-data; rdoc-data --install
+		>= 1.9.2 : nothing to do!
+
+	-> install mysql server and client
+		sudo apt-get install mysql-server
+
+		NOTE : It will ask for password, enter it and remember it, you will need it to configure mysql connection.
+		   	   current pw is t...p...c..14
+
+		sudo apt-get install mysql-client
+
+	-> install ruby-mysql
+		sudo apt-get install ruby-mysql
+
+	-> install the puppet-dashboard
+		cd /opt
+		git clone git://github.com/puppetlabs/puppet-dashboard.git
+
+	-> give the ownership of /opt/puppet-dashboard folder to the user you have created above (puppet-dashboard).
+
+		sudo chown -R puppet-dashboard:puppet-dashboard /opt/puppet-dashboard
+
+	-> creating a mysql user for puppet-dashboard
+	   Do not give Dashboard the keys to MySQL’s root user account — create a new database user for it (preferably named “dashboard”) 
+	   and choose a secure password.
+	  
+		mysql -uroot -p #login to mysql
+		password:       # enter the pasword here
+		mysql> 
+
+		mysql> CREATE DATABASE thirdpillar_puppet_dashboard CHARACTER SET utf8;
+		Query OK, 1 row affected (0.00 sec)
+
+		mysql> CREATE USER 'dashboard'@'localhost' IDENTIFIED BY 'tpcloud';
+		Query OK, 0 rows affected (0.00 sec)
+
+		mysql> GRANT ALL PRIVILEGES ON thirdpillar_puppet_dashboard.* TO 'dashboard'@'localhost';
+		Query OK, 0 rows affected (0.00 sec)
+
+		mysql>
+
+	-> install bundler gem
+		gem install bundler # you will need it to run bundle install
+
+	-> install nodejs
+		sudo apt-get install nodejs # it provide javascript runtime as required during assets precompile 
+
+___________________________________________________________________________________________________________
+
+Configuring the puppet-dashboard App
+****************************************
+
+	-> Increase mysql record size
+		By default 17mb of single record can be saved, sometime single row of puppet may have more, so increase it to 32MB .
+
+		nano /etc/mysql/my.cnf # open the my.cnf file and change the below value from 16 to 32
+
+		max_allowed_packet      = 32M
+
+		/etc/init.d/mysql restart # restart the mysql
+
+    -> enabling file bucket view on puppet master
+		With the filebucket viewer, Dashboard can display the contents of different file versions when you click on MD5 checksums in reports.
+		So before proceeding we need to enable this service on puppet master. So modify manifets/site.pp on your master and add the below line.
+
+		filebucket { "main":
+		  server => "puppet01.thirdpillar.com",
+		  path => false,
+		}
+
+		File { backup => "main" }
+
+    -> enabling reporting on dashboard
+		whenevr puppet master run a manifest it generate a report of it. To view this report on dashboard you need to modify 
+		puppet.conf on puppet master server. Go to puppet master server and below under master group of puppet.conf
+
+	  [master]
+        ---other configuration----
+        ----below two line added---
+		reports = store, http
+		reporturl = http://10.1.5.143:3000/reports/upload #it should be fqdn, but using port for now as fqdn still not available.
+
+      Also, on each node you need to add below in puppet.conf
+		[agent]
+		report = true
+
+      NOTE : In our case Agent and master is on same machine, so above line will go in same file /etc/puppet/puppet.conf.
+             Add it below the master group. 
+
+
+
+	-> Create config/settings.yml file
+		  This file contain setting for the dashboard to communicate with puppet master. 
+          config/settings.yml file is already present in your project folder as sample.
+          copy this file with settings.yml name
+
+		  root@puppet01:/opt/puppet-dashboard/config# cp settings.yml.example settings.yml
+
+	  	  Now, open the settings.yml file and just modify below for now
+
+			ca_server: 'puppet01.thirdpillar.com' #your puppet master server fqdn
+			ca_port: 8140 # port at which puppet master is running
+			enable_inventory_service: true 
+			inventory_server: 'puppet01.thirdpillar.com' # your puppet master fqdn
+			inventory_port: 8140
+			use_file_bucket_diffs: true 
+			file_bucket_server: 'puppet01.thirdpillar.com' # your puppet master fqdn
+			file_bucket_port: 8140
+			secret_token: 'b1bbd28batman206e99da248d37d84f73c9ecb38608fc0d8b2709872290a3f43b244e' # give any arbitrery value
+   
+    -> Generating Certs and Connecting to the Puppet Master
+       After you have made the changes to settings.yml you can generate the certificate which the dashbord can use to connect to master.
+
+		root@puppet01:/opt/puppet-dashboard# bundle exec rake RAILS_ENV=production cert:create_key_pair
+		root@puppet01:/opt/puppet-dashboard# bundle exec rake RAILS_ENV=production cert:request
+
+		Now go to your puppet master server and run below command
+
+		puppet cert sign dashboard
+
+		Again come back to your puppet-dashboard project and run below command:
+
+		root@puppet01:/opt/puppet-dashboard# bundle exec rake RAILS_ENV=production cert:retrieve
+
+
+    -> restart the puppet master
+       Since you have made some changes to puppet master configuration. You need to restart it.
+       go to puppet master server and run below command:
+
+	   /etc/init.d/puppetmaster restart # restart master
+
+__________________________________________________________________________________________________________________________
+
+Starting the puppet-dashboard:
+********************************
+	
+	-> Create config/database.yml file
+
+		cd /opt/puppet-dashboard/config/
+		touch database.yml
+
+		Add below line to it. See that the detail like username , password etc should be same as you have set above for mysql
+		
+		production:
+		  database: thirdpillar_puppet_dashboard
+		  username: dashboard
+		  password: tpcloud
+		  encoding: utf8
+		  adapter: mysql2
+
+	-> Install the bundle
+		root@puppet01:/opt/puppet-dashboard# sudo bundle install --deployment --without test development postgresql
+
+	-> migrate the database.
+		root@puppet01:/opt/puppet-dashboard# bundle exec rake RAILS_ENV=production db:migrate
+
+	-> precompile the assets
+		root@puppet01:/opt/puppet-dashboard# bundle exec rake RAILS_ENV=production assets:precompile
+
+	-> Starting the webrik server
+		At this point you can see the dashboard in browser
+
+		root@puppet01:/opt/puppet-dashboard# bundle exec rails s -e production
+		=> Booting Thin
+		=> Rails 3.2.18 application starting in production on http://0.0.0.0:3000
+		=> Call with -d to detach
+		=> Ctrl-C to shutdown server
+
+		Go to below URL to see the dashboard page
+		http://10.1.5.143:3000/
+
+____________________________________________________________________________________________________________
+
+Configuring puppet dashboard with apache and passenger
+*******************************************************
+At this point your puppet-dashboard is up and running. But webrick is not suitable for production environment.
+you’ll need to deploy in a production-quality server like Apache with Passenger or Nginx with Passenger, Thin, 
+or Unicorn before rolling out Dashboard to your entire site.
+
+To deploy with passenger + apache see passenger_with_apache.txt document.
+
+
+
+
+
+
